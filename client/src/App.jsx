@@ -1,35 +1,54 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// client/src/App.jsx
+import { useState, useEffect } from 'react';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    fetch('/api')
+      .then((res) => res.json())
+      .then((data) => setMessage(data.message));
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
+    <div className="lobby-container" style={{ textAlign: 'center', padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1 style={{ color: '#4A90E2' }}>Hello and Welcome to the Lobby Page!</h1>
+      <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>
+        {message || 'Loading...'}
       </p>
-    </>
-  )
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+        <button
+          style={{
+            padding: '1rem 2rem',
+            fontSize: '1rem',
+            background: '#7ED957',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+          onClick={() => alert('Donor clicked!')}
+        >
+          Enter as Donor
+        </button>
+        <button
+          style={{
+            padding: '1rem 2rem',
+            fontSize: '1rem',
+            background: '#F9A826',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+          onClick={() => alert('Supporter clicked!')}
+        >
+          Enter as Supporter
+        </button>
+      </div>
+    </div>
+  );
 }
 
-export default App
+export default App;
