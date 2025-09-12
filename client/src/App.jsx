@@ -95,7 +95,7 @@ function App() {
             <input
               type="text"
               value={message}
-              placeholder="Hey..."
+              placeholder="I would like to..."
               onChange={(event) => setMessage(event.target.value)}
               onKeyPress={(event) => event.key === 'Enter' && sendMessage()}
             />
