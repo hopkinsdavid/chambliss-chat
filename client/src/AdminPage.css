@@ -1,0 +1,163 @@
+/* client/src/AdminPage.css */
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px;
+  min-height: 100vh;
+  background-color: #F8F8F8;
+  width: 100vw;
+}
+
+.admin-header {
+  text-align: center;
+  margin-bottom: 40px;
+  background: #FFFFFF;
+  padding: 20px 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 700px;
+}
+
+.admin-logo {
+    width: 60px;
+    margin-bottom: 15px;
+}
+
+.admin-header h1 {
+  font-size: 2.5rem;
+  color: #4CAF50;
+  margin-bottom: 5px;
+  font-weight: 700;
+}
+
+.admin-section {
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  margin-bottom: 30px;
+  width: 100%;
+  max-width: 700px;
+}
+
+.admin-section h2 {
+  font-size: 1.6rem;
+  color: #333;
+  margin-bottom: 25px;
+  border-bottom: 2px solid #EEE;
+  padding-bottom: 15px;
+}
+
+.input-group {
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #555;
+}
+
+.admin-section input[type="text"] {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 10px;
+  transition: border-color 0.3s ease;
+}
+.admin-section input[type="text"]:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.admin-section button {
+  width: auto;
+  padding: 12px 25px;
+  border: none;
+  border-radius: 8px;
+  background: #4CAF50;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+.admin-section button:hover {
+  background-color: #43A047;
+  transform: translateY(-2px);
+}
+
+.admin-message {
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #E6F7FF;
+  border: 1px solid #91D5FF;
+  color: #1890FF;
+  font-size: 0.95rem;
+}
+
+.generated-code {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f0fdf4; /* Light green background */
+    border: 1px solid #d0f0d0;
+    border-radius: 8px;
+}
+
+.generated-code p {
+    margin-bottom: 8px;
+    font-size: 1.05rem;
+    color: #333;
+}
+
+.room-code-display {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #e8ffe8; /* Lighter green for code background */
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px dashed #4CAF50;
+    color: #007010;
+    font-weight: bold;
+    display: inline-block;
+    margin-top: 5px;
+    letter-spacing: 1px;
+}
+
+
+/* Active Rooms Table */
+.rooms-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.rooms-table th, .rooms-table td {
+    border: 1px solid #E0E0E0;
+    padding: 12px 15px;
+    text-align: left;
+    font-size: 0.95rem;
+    color: #444;
+}
+
+.rooms-table th {
+    background-color: #F0F0F0;
+    font-weight: 600;
+    color: #333;
+}
+
+.rooms-table tr:nth-child(even) {
+    background-color: #F8F8F8;
+}
+
+.rooms-table tbody tr:hover {
+    background-color: #E8F5E9; /* Light green hover */
+}

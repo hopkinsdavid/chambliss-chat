@@ -1,7 +1,8 @@
 // client/src/App.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // Import useRef
 import io from 'socket.io-client';
 import './App.css';
+import ChamblissLogo from '/ccvertical.png'; // Import the logo
 
 const socket = io.connect("http://localhost:3001");
 
@@ -12,6 +13,8 @@ function App() {
   const [messageList, setMessageList] = useState([]);
   const [hasJoined, setHasJoined] = useState(false);
 
+  const chatBodyRef = useRef(null); // Ref for auto-scrolling
+
   const joinRoom = () => {
     if (username !== "" && room !== "") {
       socket.emit("join_room", room);
@@ -20,21 +23,23 @@ function App() {
   };
 
   const sendMessage = () => {
-    if (message !== "") {
+    if (message.trim() !== "") { // Trim to prevent sending empty messages
       const messageData = {
         room: room,
-        author: username, // Use the username from state
+        author: username,
         message: message,
-        time: new Date(Date.now()).toLocaleTimeString(),
+        time: new Date(Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // Nicer time format
       };
       socket.emit("send_message", messageData);
       setMessageList((list) => [...list, messageData]);
-      setMessage("");
+      setMessage(""); // Clear the input after sending
     }
   };
 
   const exitChat = () => {
     setHasJoined(false);
+    setRoom(""); // Clear room and username when exiting
+    setUsername("");
     setMessageList([]);
   };
 
@@ -44,25 +49,43 @@ function App() {
     };
     socket.on("receive_message", handleReceiveMessage);
 
+    // Cleanup function to remove the event listener when component unmounts
     return () => {
       socket.off("receive_message", handleReceiveMessage);
     };
   }, [socket]);
 
+  // Auto-scroll to the bottom of the chat when new messages arrive
+  useEffect(() => {
+    if (chatBodyRef.current) {
+      chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+    }
+  }, [messageList]);
+
+
   return (
     <div className="App">
       {!hasJoined ? (
         <div className="joinChatContainer">
+          <img src={ChamblissLogo} alt="Chambliss Center Logo" />
           <h3>Hey there, join a Chat!</h3>
           <input
             type="text"
             placeholder="Your Name..."
+            value={username}
             onChange={(event) => setUsername(event.target.value)}
+            onKeyPress={(event) => {
+              event.key === "Enter" && joinRoom();
+            }}
           />
           <input
             type="text"
             placeholder="Room Code..."
+            value={room}
             onChange={(event) => setRoom(event.target.value)}
+            onKeyPress={(event) => {
+              event.key === "Enter" && joinRoom();
+            }}
           />
           <button onClick={joinRoom}>Join Room</button>
         </div>
@@ -72,21 +95,19 @@ function App() {
             <p>Live Chat - Room: {room}</p>
             <button onClick={exitChat} className="exit-btn">Exit</button>
           </div>
-          <div className="chat-body">
+          <div className="chat-body" ref={chatBodyRef}>
             {messageList.map((msg, index) => (
               <div
                 key={index}
-                className="message"
+                className="message-container"
                 id={username === msg.author ? "you" : "other"}
               >
-                <div>
-                  <div className="message-content">
-                    <p>{msg.message}</p>
-                  </div>
-                  <div className="message-meta">
-                    <p id="time">{msg.time}</p>
-                    <p id="author">{msg.author}</p>
-                  </div>
+                <div className="message-content">
+                  <p>{msg.message}</p>
+                </div>
+                <div className="message-meta">
+                  <p id="author">{msg.author}</p>
+                  <p id="time">{msg.time}</p>
                 </div>
               </div>
             ))}
@@ -98,6 +119,7 @@ function App() {
               placeholder="I would like to..."
               onChange={(event) => setMessage(event.target.value)}
               onKeyPress={(event) => event.key === 'Enter' && sendMessage()}
+              style={{ backgroundColor: "#666464ff", color: "#0a0909ff" }} // Force white background and black text
             />
             <button onClick={sendMessage}>&#9658;</button>
           </div>
