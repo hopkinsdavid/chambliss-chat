@@ -161,3 +161,9 @@
 .rooms-table tbody tr:hover {
     background-color: #E8F5E9; /* Light green hover */
 }
+
+.rooms-table button { margin-right: 5px; padding: 5px 10px; border-radius: 4px; border: none; cursor: pointer; color: white; }
+.edit-btn { background-color: #1976D2; }
+.delete-btn { background-color: #D32F2F; }
+.save-btn { background-color: #388E3C; }
+.cancel-btn { background-color: #757575; }

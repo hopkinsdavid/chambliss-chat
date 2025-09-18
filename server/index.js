@@ -65,6 +65,36 @@ app.get('/admin/rooms', (req, res) => {
     res.status(200).json(activeRooms);
 });
 
+// --- Endpoint to UPDATE a room ---
+app.patch('/admin/rooms/:roomCode', (req, res) => {
+    const { roomCode } = req.params;
+    const { creatorName } = req.body;
+
+    if (activeRooms[roomCode]) {
+        activeRooms[roomCode].creatorName = creatorName;
+        console.log(`Admin updated room ${roomCode}. New creator: ${creatorName}`);
+        res.status(200).json({ message: 'Room updated successfully', room: activeRooms[roomCode] });
+    } else {
+        res.status(404).json({ message: 'Room not found' });
+    }
+});
+
+// --- Endpoint to DELETE a room ---
+app.delete('/admin/rooms/:roomCode', (req, res) => {
+    const { roomCode } = req.params;
+    if (activeRooms[roomCode]) {
+        delete activeRooms[roomCode];
+        // Notify anyone in the room that it has been closed
+        io.to(roomCode).emit("room_closed", { message: "This chat room has been closed by an administrator." });
+        console.log(`Admin deleted room ${roomCode}`);
+        res.status(200).json({ message: 'Room deleted successfully' });
+    } else {
+        res.status(404).json({ message: 'Room not found' });
+    }
+});
+
+
+
 // --- Socket.IO Connection Handling ---
 io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);

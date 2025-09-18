@@ -9,6 +9,9 @@ function AdminPage() {
   const [newRoomExpiry, setNewRoomExpiry] = useState("");
   const [activeRooms, setActiveRooms] = useState({});
   const [message, setMessage] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Placeholder for auth state
+  const [editingRoomCode, setEditingRoomCode] = useState(null); // Track which room is being edited
+  const [editCreatorName, setEditCreatorName] = useState(""); // Temp state for editing creator name
 
   const fetchRooms = async () => {
     try {
@@ -49,6 +52,54 @@ function AdminPage() {
       setMessage("Error creating room: " + error.message);
     }
   };
+
+  // Function to handle deleting a room
+  const handleDeleteRoom = async (roomCode) => {
+      if (window.confirm(`Are you sure you want to delete room ${roomCode}?`)) {
+          try {
+              const response = await fetch(`/admin/rooms/${roomCode}`, { method: 'DELETE' });
+              if (response.ok) {
+                  setMessage(`Room ${roomCode} deleted successfully.`);
+                  fetchRooms(); // Refresh the list
+              } else {
+                  setMessage("Failed to delete room.");
+              }
+          } catch (error) {
+              setMessage("Error deleting room.");
+          }
+      }
+  };
+
+  // Function to handle updating a room
+  const handleUpdateRoom = async (roomCode) => {
+      try {
+          const response = await fetch(`/admin/rooms/${roomCode}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ creatorName: editCreatorName })
+          });
+
+          if (response.ok) {
+              setMessage(`Room ${roomCode} updated.`);
+              setEditingRoomCode(null); // Exit edit mode
+              fetchRooms(); // Refresh the list
+          } else {
+              setMessage("Failed to update room.");
+          }
+      } catch (error) {
+          setMessage("Error updating room.");
+      }
+  };
+
+  // FUnction to enter edit mode 
+  const startEditing = (room) => {
+        setEditingRoomCode(room.code);
+        setEditCreatorName(room.data.creatorName);
+    };
+
+    useEffect(() => {
+        if (isAuthenticated) fetchRooms();
+    }, [isAuthenticated]);
 
   useEffect(() => {
     fetchRooms();
@@ -100,33 +151,51 @@ function AdminPage() {
 
       <div className="admin-section active-rooms-section">
         <h2>Active Chat Rooms</h2>
-        {Object.keys(activeRooms).length === 0 ? (
-            <p>No active rooms found.</p>
-        ) : (
-            <table className="rooms-table">
-                <thead>
-                    <tr>
-                        <th>Room Code</th>
-                        <th>Created By</th>
-                        <th>Created At</th>
-                        <th>Status</th>
+        <table className="rooms-table">
+            <thead>
+                <tr>
+                    <th>Room Code</th>
+                    <th>Created By</th>
+                    <th>Created At</th>
+                    <th>Actions</th> {/* NEW Column */}
+                </tr>
+            </thead>
+            <tbody>
+                {Object.entries(activeRooms).map(([code, data]) => (
+                    <tr key={code}>
+                        <td>{code}</td>
+                        <td>
+                            {editingRoomCode === code ? (
+                                <input
+                                    type="text"
+                                    value={editCreatorName}
+                                    onChange={(e) => setEditCreatorName(e.target.value)}
+                                />
+                            ) : (
+                                data.creatorName
+                            )}
+                        </td>
+                        <td>{new Date(data.createdAt).toLocaleString()}</td>
+                        <td>
+                            {editingRoomCode === code ? (
+                                <>
+                                    <button className="save-btn" onClick={() => handleUpdateRoom(code)}>Save</button>
+                                    <button className="cancel-btn" onClick={() => setEditingRoomCode(null)}>Cancel</button>
+                                </>
+                            ) : (
+                                <>
+                                    <button className="edit-btn" onClick={() => startEditing({ code, data })}>Edit</button>
+                                    <button className="delete-btn" onClick={() => handleDeleteRoom(code)}>Delete</button>
+                                </>
+                            )}
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                    {Object.entries(activeRooms).map(([code, data]) => (
-                        <tr key={code}>
-                            <td><span className="room-code-display">{code}</span></td>
-                            <td>{data.creatorName}</td>
-                            <td>{new Date(data.createdAt).toLocaleString()}</td>
-                            <td>{getExpiryStatus(data.expiresAt)}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        )}
-      </div>
+                ))}
+            </tbody>
+        </table>
     </div>
-  );
+</div>
+);
 }
 
 export default AdminPage;
