@@ -12,13 +12,14 @@ function App() {
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [hasJoined, setHasJoined] = useState(false);
+  const [joinError, setJoinError] = useState(""); // To store room joining errors
 
   const chatBodyRef = useRef(null); // Ref for auto-scrolling
 
   const joinRoom = () => {
     if (username !== "" && room !== "") {
       socket.emit("join_room", room);
-      setHasJoined(true);
+      // We will now wait for the 'room_join_status' event from the server
     }
   };
 
@@ -47,11 +48,33 @@ function App() {
     const handleReceiveMessage = (data) => {
       setMessageList((list) => [...list, data]);
     };
+
+    const handleRoomJoinStatus = (data) => {
+      if (data.success) {
+        setHasJoined(true);
+        setJoinError("");
+      } else {
+        setHasJoined(false);
+        setJoinError(data.message);
+      }
+    };
+    
+    const handleRoomClosed = (data) => {
+      alert(data.message);
+      exitChat();
+    };
+
+
     socket.on("receive_message", handleReceiveMessage);
+    socket.on("room_join_status", handleRoomJoinStatus);
+    socket.on("room_closed", handleRoomClosed);
+
 
     // Cleanup function to remove the event listener when component unmounts
     return () => {
       socket.off("receive_message", handleReceiveMessage);
+      socket.off("room_join_status", handleRoomJoinStatus);
+      socket.off("room_closed", handleRoomClosed);
     };
   }, [socket]);
 
@@ -88,6 +111,7 @@ function App() {
             }}
           />
           <button onClick={joinRoom}>Join Room</button>
+          {joinError && <p className="error-message">{joinError}</p>}
         </div>
       ) : (
         <div className="chat-window">

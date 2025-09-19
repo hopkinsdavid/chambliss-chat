@@ -20,8 +20,9 @@ const io = new Server(server, {
 const PORT = 3001;
 
 // --- Room Management ---
-const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string } }
+const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: string[] } }
 const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const MAX_USERS_PER_ROOM = 3;
 
 // Function to clean up expired rooms
 function cleanupExpiredRooms() {
@@ -54,7 +55,8 @@ app.post('/admin/create-room', (req, res) => {
     activeRooms[roomCode] = {
         expiresAt,
         creatorName,
-        createdAt: Date.now() // For additional tracking
+        createdAt: Date.now(), // For additional tracking
+        users: [] // Initialize with an empty array of users
     };
 
     console.log(`Room ${roomCode} created by ${creatorName}, expires at ${new Date(expiresAt).toLocaleString()}`);
@@ -101,9 +103,15 @@ io.on("connection", (socket) => {
 
     socket.on("join_room", (roomCode) => {
         if (activeRooms[roomCode] && activeRooms[roomCode].expiresAt > Date.now()) {
-            socket.join(roomCode);
-            console.log(`User with ID: ${socket.id} joined room: ${roomCode}`);
-            socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}` });
+            const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
+            if (currentRoomSize < MAX_USERS_PER_ROOM) {
+                socket.join(roomCode);
+                activeRooms[roomCode].users.push(socket.id);
+                console.log(`User with ID: ${socket.id} joined room: ${roomCode}`);
+                socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}` });
+            } else {
+                socket.emit("room_join_status", { success: false, message: "Room is full." });
+            }
         } else {
             console.log(`User with ID: ${socket.id} tried to join expired/invalid room: ${roomCode}`);
             socket.emit("room_join_status", { success: false, message: "Room is invalid or has expired." });
@@ -120,7 +128,14 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", () => {
         console.log("User Disconnected", socket.id);
-        // In a more complex app, you'd track users in rooms here
+        // Remove user from the room's user list upon disconnection
+        for (const roomCode in activeRooms) {
+            const index = activeRooms[roomCode].users.indexOf(socket.id);
+            if (index !== -1) {
+                activeRooms[roomCode].users.splice(index, 1);
+                break;
+            }
+        }
     });
 });
 
