@@ -57,7 +57,7 @@ function AdminPage() {
   const handleDeleteRoom = async (roomCode) => {
       if (window.confirm(`Are you sure you want to delete room ${roomCode}?`)) {
           try {
-              const response = await fetch(`/admin/rooms/${roomCode}`, { method: 'DELETE' });
+              const response = await fetch(`http://localhost:3001/admin/rooms/${roomCode}`, { method: 'DELETE' });
               if (response.ok) {
                   setMessage(`Room ${roomCode} deleted successfully.`);
                   fetchRooms(); // Refresh the list
@@ -73,7 +73,7 @@ function AdminPage() {
   // Function to handle updating a room
   const handleUpdateRoom = async (roomCode) => {
       try {
-          const response = await fetch(`/admin/rooms/${roomCode}`, {
+          const response = await fetch(`http://localhost:3001/admin/rooms/${roomCode}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ creatorName: editCreatorName })
@@ -91,7 +91,7 @@ function AdminPage() {
       }
   };
 
-  // FUnction to enter edit mode 
+  // Function to enter edit mode 
   const startEditing = (room) => {
         setEditingRoomCode(room.code);
         setEditCreatorName(room.data.creatorName);
@@ -107,6 +107,7 @@ function AdminPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // its not working rn. its supposed to show expired in the admin page. okay its somewhat working 
   const getExpiryStatus = (expiresAt) => {
     const expiryDate = new Date(expiresAt);
     const now = new Date();
@@ -157,7 +158,8 @@ function AdminPage() {
                     <th>Room Code</th>
                     <th>Created By</th>
                     <th>Created At</th>
-                    <th>Actions</th> {/* NEW Column */}
+                    <th>Status</th>
+                    <th>Actions</th> 
                 </tr>
             </thead>
             <tbody>
@@ -176,6 +178,7 @@ function AdminPage() {
                             )}
                         </td>
                         <td>{new Date(data.createdAt).toLocaleString()}</td>
+                        <td>{getExpiryStatus(data.expiresAt)}</td>
                         <td>
                             {editingRoomCode === code ? (
                                 <>
