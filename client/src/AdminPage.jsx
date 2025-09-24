@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import './AdminPage.css'; // We'll create this next
 import ChamblissLogo from '/cchorizontal.png';
+import App from './App'; // Import the App component
 
 function AdminPage() {
   const [creatorName, setCreatorName] = useState("Chambliss Admin"); // Default name
@@ -12,6 +13,7 @@ function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(true); // Placeholder for auth state
   const [editingRoomCode, setEditingRoomCode] = useState(null); // Track which room is being edited
   const [editCreatorName, setEditCreatorName] = useState(""); // Temp state for editing creator name
+  const [viewingRoom, setViewingRoom] = useState(null);
 
   const fetchRooms = async () => {
     try {
@@ -120,6 +122,10 @@ function AdminPage() {
   };
 
 
+  if (viewingRoom) {
+    return <App room={viewingRoom} username="Admin" onExit={() => setViewingRoom(null)} />;
+  }
+
   return (
     <div className="admin-page">
       <div className="admin-header">
@@ -187,6 +193,7 @@ function AdminPage() {
                                 </>
                             ) : (
                                 <>
+                                    <button className="view-btn" onClick={() => setViewingRoom(code)}>View</button>
                                     <button className="edit-btn" onClick={() => startEditing({ code, data })}>Edit</button>
                                     <button className="delete-btn" onClick={() => handleDeleteRoom(code)}>Delete</button>
                                 </>

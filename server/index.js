@@ -20,9 +20,9 @@ const io = new Server(server, {
 const PORT = 3001;
 
 // --- Room Management ---
-const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: string[] } }
+const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: string[], messages: any[] } }
 const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const MAX_USERS_PER_ROOM = 3;
+const MAX_USERS_PER_ROOM = 4; // Increased to 4 to allow admin to join
 
 // Function to clean up expired rooms
 function cleanupExpiredRooms() {
@@ -56,7 +56,8 @@ app.post('/admin/create-room', (req, res) => {
         expiresAt,
         creatorName,
         createdAt: Date.now(), // For additional tracking
-        users: [] // Initialize with an empty array of users
+        users: [], // Initialize with an empty array of users
+        messages: [], // Array to store messages
     };
 
     console.log(`Room ${roomCode} created by ${creatorName}, expires at ${new Date(expiresAt).toLocaleString()}`);
@@ -109,6 +110,7 @@ io.on("connection", (socket) => {
                 activeRooms[roomCode].users.push(socket.id);
                 console.log(`User with ID: ${socket.id} joined room: ${roomCode}`);
                 socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}` });
+                socket.emit("message_history", activeRooms[roomCode].messages);
             } else {
                 socket.emit("room_join_status", { success: false, message: "Room is full." });
             }
@@ -120,6 +122,7 @@ io.on("connection", (socket) => {
 
     socket.on("send_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
+            activeRooms[data.room].messages.push(data);
             socket.to(data.room).emit("receive_message", data);
         } else {
             socket.emit("room_join_status", { success: false, message: "Cannot send message: Room is invalid or has expired." });
@@ -141,12 +144,17 @@ io.on("connection", (socket) => {
     socket.on("update_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
             // Broadcast the message update to others in the room
+            const messageIndex = activeRooms[data.room].messages.findIndex(msg => msg.id === data.id);
+            if (messageIndex !== -1) {
+                activeRooms[data.room].messages[messageIndex].message = data.message;
+            }
             socket.to(data.room).emit("message_updated", { id: data.id, message: data.message });
         }
     });
 
     socket.on("delete_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
+            activeRooms[data.room].messages = activeRooms[data.room].messages.filter(msg => msg.id !== data.id);
             // Broadcast the message deletion to others in the room
             socket.to(data.room).emit("message_deleted", { id: data.id });
         }

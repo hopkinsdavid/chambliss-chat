@@ -7,12 +7,12 @@ import { v4 as uuidv4 } from 'uuid'; // Import uuid
 
 const socket = io.connect("http://localhost:3001");
 
-function App() {
-  const [username, setUsername] = useState("");
-  const [room, setRoom] = useState("");
+function App({ room: initialRoom, username: initialUsername, onExit }) {
+  const [username, setUsername] = useState(initialUsername || "");
+  const [room, setRoom] = useState(initialRoom || "");
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
-  const [hasJoined, setHasJoined] = useState(false);
+  const [hasJoined, setHasJoined] = useState(!!(initialRoom && initialUsername));
   const [joinError, setJoinError] = useState("");
   const [editingMessage, setEditingMessage] = useState(null); // Track which message is being edited
 
@@ -23,6 +23,12 @@ function App() {
       socket.emit("join_room", room);
     }
   };
+
+  useEffect(() => {
+    if (initialRoom && initialUsername) {
+      joinRoom();
+    }
+  }, [initialRoom, initialUsername]);
 
   const sendMessage = () => {
     if (message.trim() !== "") {
@@ -65,10 +71,14 @@ function App() {
 
 
   const exitChat = () => {
-    setHasJoined(false);
-    setRoom("");
-    setUsername("");
-    setMessageList([]);
+    if (onExit) {
+      onExit();
+    } else {
+      setHasJoined(false);
+      setRoom("");
+      setUsername("");
+      setMessageList([]);
+    }
   };
 
   useEffect(() => {
@@ -103,12 +113,17 @@ function App() {
       setMessageList((list) => list.filter((msg) => msg.id !== data.id));
     };
 
+    const handleMessageHistory = (history) => {
+      setMessageList(history);
+    }
+
 
     socket.on("receive_message", handleReceiveMessage);
     socket.on("room_join_status", handleRoomJoinStatus);
     socket.on("room_closed", handleRoomClosed);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
+    socket.on("message_history", handleMessageHistory);
 
 
     return () => {
@@ -117,6 +132,7 @@ function App() {
       socket.off("room_closed", handleRoomClosed);
       socket.off("message_updated", handleMessageUpdated);
       socket.off("message_deleted", handleMessageDeleted);
+      socket.off("message_history", handleMessageHistory);
     };
   }, [socket]);
 
@@ -158,7 +174,7 @@ function App() {
         <div className="chat-window">
           <div className="chat-header">
             <p>Live Chat - Room: {room}</p>
-            <button onClick={exitChat} className="exit-btn">Exit</button>
+            <button onClick={exitChat} className="exit-btn">{onExit ? 'Back to Admin' : 'Exit'}</button>
           </div>
           <div className="chat-body" ref={chatBodyRef}>
             {messageList.map((msg) => (
@@ -188,7 +204,7 @@ function App() {
                 <div className="message-meta">
                   <p id="author">{msg.author}</p>
                   <p id="time">{msg.time}</p>
-                   {username === msg.author && !editingMessage && (
+                   {(username === msg.author || username === 'Admin') && !editingMessage && (
                     <div className="message-actions">
                       <button className="action-btn" onClick={() => setEditingMessage(msg.id)}>✎</button>
                       <button className="action-btn delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</button>
