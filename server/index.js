@@ -137,6 +137,21 @@ io.on("connection", (socket) => {
             }
         }
     });
+
+    socket.on("update_message", (data) => {
+        if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
+            // Broadcast the message update to others in the room
+            socket.to(data.room).emit("message_updated", { id: data.id, message: data.message });
+        }
+    });
+
+    socket.on("delete_message", (data) => {
+        if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
+            // Broadcast the message deletion to others in the room
+            socket.to(data.room).emit("message_deleted", { id: data.id });
+        }
+    });
+    
 });
 
 server.listen(PORT, () => {

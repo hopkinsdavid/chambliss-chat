@@ -1,8 +1,9 @@
 // client/src/App.jsx
-import { useState, useEffect, useRef } from 'react'; // Import useRef
+import { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
-import ChamblissLogo from '/ccvertical.png'; // Import the logo
+import ChamblissLogo from '/ccvertical.png';
+import { v4 as uuidv4 } from 'uuid'; // Import uuid
 
 const socket = io.connect("http://localhost:3001");
 
@@ -12,34 +13,60 @@ function App() {
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [hasJoined, setHasJoined] = useState(false);
-  const [joinError, setJoinError] = useState(""); // To store room joining errors
+  const [joinError, setJoinError] = useState("");
+  const [editingMessage, setEditingMessage] = useState(null); // Track which message is being edited
 
-  const chatBodyRef = useRef(null); // Ref for auto-scrolling
+  const chatBodyRef = useRef(null);
 
   const joinRoom = () => {
     if (username !== "" && room !== "") {
       socket.emit("join_room", room);
-      // We will now wait for the 'room_join_status' event from the server
     }
   };
 
   const sendMessage = () => {
-    if (message.trim() !== "") { // Trim to prevent sending empty messages
+    if (message.trim() !== "") {
       const messageData = {
+        id: uuidv4(), // Add a unique ID
         room: room,
         author: username,
         message: message,
-        time: new Date(Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // Nicer time format
+        time: new Date(Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       socket.emit("send_message", messageData);
       setMessageList((list) => [...list, messageData]);
-      setMessage(""); // Clear the input after sending
+      setMessage("");
     }
   };
 
+  const updateMessage = (id, newMessage) => {
+    if (newMessage.trim() === "") {
+        deleteMessage(id); // If the edited message is empty, delete it
+        return;
+    }
+    const messageData = {
+      id: id,
+      room: room,
+      message: newMessage,
+    };
+    socket.emit("update_message", messageData);
+    // Update the message in the local state
+    setMessageList((list) =>
+      list.map((msg) => (msg.id === id ? { ...msg, message: newMessage } : msg))
+    );
+    setEditingMessage(null); // Exit editing mode
+  };
+
+  const deleteMessage = (id) => {
+    socket.emit("delete_message", { id, room });
+    // Remove the message from the local state
+    setMessageList((list) => list.filter((msg) => msg.id !== id));
+  };
+
+
   const exitChat = () => {
     setHasJoined(false);
-    setRoom(""); // Clear room and username when exiting
+    setRoom("");
     setUsername("");
     setMessageList([]);
   };
@@ -64,21 +91,35 @@ function App() {
       exitChat();
     };
 
+    const handleMessageUpdated = (data) => {
+      setMessageList((list) =>
+        list.map((msg) =>
+          msg.id === data.id ? { ...msg, message: data.message } : msg
+        )
+      );
+    };
+
+    const handleMessageDeleted = (data) => {
+      setMessageList((list) => list.filter((msg) => msg.id !== data.id));
+    };
+
 
     socket.on("receive_message", handleReceiveMessage);
     socket.on("room_join_status", handleRoomJoinStatus);
     socket.on("room_closed", handleRoomClosed);
+    socket.on("message_updated", handleMessageUpdated);
+    socket.on("message_deleted", handleMessageDeleted);
 
 
-    // Cleanup function to remove the event listener when component unmounts
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("room_join_status", handleRoomJoinStatus);
       socket.off("room_closed", handleRoomClosed);
+      socket.off("message_updated", handleMessageUpdated);
+      socket.off("message_deleted", handleMessageDeleted);
     };
   }, [socket]);
 
-  // Auto-scroll to the bottom of the chat when new messages arrive
   useEffect(() => {
     if (chatBodyRef.current) {
       chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
@@ -120,18 +161,39 @@ function App() {
             <button onClick={exitChat} className="exit-btn">Exit</button>
           </div>
           <div className="chat-body" ref={chatBodyRef}>
-            {messageList.map((msg, index) => (
+            {messageList.map((msg) => (
               <div
-                key={index}
+                key={msg.id}
                 className="message-container"
                 id={username === msg.author ? "you" : "other"}
               >
                 <div className="message-content">
-                  <p>{msg.message}</p>
+                  {editingMessage === msg.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      className="edit-input"
+                      defaultValue={msg.message}
+                      onBlur={(e) => updateMessage(msg.id, e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          updateMessage(msg.id, e.target.value);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <p>{msg.message}</p>
+                  )}
                 </div>
                 <div className="message-meta">
                   <p id="author">{msg.author}</p>
                   <p id="time">{msg.time}</p>
+                   {username === msg.author && !editingMessage && (
+                    <div className="message-actions">
+                      <button className="action-btn" onClick={() => setEditingMessage(msg.id)}>✎</button>
+                      <button className="action-btn delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -143,7 +205,7 @@ function App() {
               placeholder="I would like to..."
               onChange={(event) => setMessage(event.target.value)}
               onKeyPress={(event) => event.key === 'Enter' && sendMessage()}
-              style={{ backgroundColor: "#666464ff", color: "#0a0909ff" }} // Force white background and black text
+              style={{ backgroundColor: "#666464ff", color: "#0a0909ff" }}
             />
             <button onClick={sendMessage}>&#9658;</button>
           </div>

@@ -244,3 +244,72 @@ body {
 .chat-body::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
+
+.message-meta {
+  display: flex;
+  font-size: 12px;
+  align-items: center; /* Align items vertically */
+  margin-top: 5px;
+}
+
+/* This will push the author and time to the left */
+.message-container #author,
+.message-container #time {
+  margin-right: 8px;
+}
+
+/* Container for Edit/Delete buttons */
+.message-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto; /* This pushes the actions to the far right */
+  opacity: 0; /* Initially hidden */
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Show actions on message container hover */
+.message-container:hover .message-actions {
+  opacity: 1;
+}
+
+/* General style for action buttons */
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px; /* A bit bigger for emoji */
+  padding: 0 5px;
+  color: #a0a0a0;
+  border-radius: 4px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.action-btn:hover {
+  transform: scale(1.2); /* Makes the icon a bit bigger on hover */
+}
+
+.delete-btn:hover {
+  color: #ff4d4d; /* Red color for delete on hover */
+}
+
+/* Styling for the input field when editing a message */
+.edit-input {
+  width: 100%;
+  border: none;
+  background-color: transparent;
+  color: rgb(143, 141, 141);
+  padding: 10px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 16px;
+  box-sizing: border-box; /* Ensures padding doesn't affect width */
+  border-bottom: 2px solid #a0a0a0;
+}
+
+#you .edit-input {
+  border-bottom: 2px solid #43a047;
+}
+
+.edit-input:focus {
+  outline: none;
+}
