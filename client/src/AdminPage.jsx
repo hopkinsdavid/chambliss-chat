@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './AdminPage.css'; // We'll create this next
 import ChamblissLogo from '/cchorizontal.png';
 import App from './App'; // Import the App component
+import LoginPage from './LoginPage'; // Import the LoginPage component
 
 function AdminPage() {
   const [creatorName, setCreatorName] = useState("Chambliss Admin"); // Default name
@@ -10,7 +11,7 @@ function AdminPage() {
   const [newRoomExpiry, setNewRoomExpiry] = useState("");
   const [activeRooms, setActiveRooms] = useState({});
   const [message, setMessage] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Placeholder for auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Set to false initially
   const [editingRoomCode, setEditingRoomCode] = useState(null); // Track which room is being edited
   const [editCreatorName, setEditCreatorName] = useState(""); // Temp state for editing creator name
   const [viewingRoom, setViewingRoom] = useState(null);
@@ -93,34 +94,39 @@ function AdminPage() {
       }
   };
 
-  // Function to enter edit mode 
+  // Function to enter edit mode
   const startEditing = (room) => {
         setEditingRoomCode(room.code);
         setEditCreatorName(room.data.creatorName);
     };
 
     useEffect(() => {
-        if (isAuthenticated) fetchRooms();
+      if (isAuthenticated) {
+        fetchRooms();
+        const interval = setInterval(fetchRooms, 30000); // Refresh every 30 seconds
+        return () => clearInterval(interval);
+      }
     }, [isAuthenticated]);
 
-  useEffect(() => {
-    fetchRooms();
-    const interval = setInterval(fetchRooms, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-  // its not working rn. its supposed to show expired in the admin page. okay its somewhat working 
+  // its not working rn. its supposed to show expired in the admin page. okay its somewhat working
   const getExpiryStatus = (expiresAt) => {
     const expiryDate = new Date(expiresAt);
     const now = new Date();
     if (expiryDate < now) {
         return <span style={{ color: 'red', fontWeight: 'bold' }}>Expired</span>;
     }
-    // switch the expiry date here 
+    // switch the expiry date here
     const diffHours = Math.round((expiryDate - now) / (1000 * 60 * 60));
     return `Expires in ~${diffHours} hours`;
   };
+  
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
 
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   if (viewingRoom) {
     return <App room={viewingRoom} username="Admin" onExit={() => setViewingRoom(null)} />;
@@ -165,7 +171,7 @@ function AdminPage() {
                     <th>Created By</th>
                     <th>Created At</th>
                     <th>Status</th>
-                    <th>Actions</th> 
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
