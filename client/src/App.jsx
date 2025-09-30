@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'; // Import uuid
 
 const socket = io.connect("http://localhost:3001");
 
-function App({ room: initialRoom, username: initialUsername, onExit }) {
+function App({ room: initialRoom, username: initialUsername, userType = 'user', onExit }) {
   const [username, setUsername] = useState(initialUsername || "");
   const [room, setRoom] = useState(initialRoom || "");
   const [message, setMessage] = useState("");
@@ -15,12 +15,14 @@ function App({ room: initialRoom, username: initialUsername, onExit }) {
   const [hasJoined, setHasJoined] = useState(!!(initialRoom && initialUsername));
   const [joinError, setJoinError] = useState("");
   const [editingMessage, setEditingMessage] = useState(null); // Track which message is being edited
+  const [userId, setUserId] = useState(localStorage.getItem('userId')); // For session persistence
 
   const chatBodyRef = useRef(null);
 
   const joinRoom = () => {
     if (username !== "" && room !== "") {
-      socket.emit("join_room", room);
+      // Pass userId and userType when joining a room
+      socket.emit("join_room", { roomCode: room, userId, userType });
     }
   };
 
@@ -47,8 +49,8 @@ function App({ room: initialRoom, username: initialUsername, onExit }) {
 
   const updateMessage = (id, newMessage) => {
     if (newMessage.trim() === "") {
-        deleteMessage(id); // If the edited message is empty, delete it
-        return;
+      deleteMessage(id); // If the edited message is empty, delete it
+      return;
     }
     const messageData = {
       id: id,
@@ -90,12 +92,17 @@ function App({ room: initialRoom, username: initialUsername, onExit }) {
       if (data.success) {
         setHasJoined(true);
         setJoinError("");
+        if (data.userId) {
+          // Save the userId to localStorage for session persistence
+          localStorage.setItem('userId', data.userId);
+          setUserId(data.userId);
+        }
       } else {
         setHasJoined(false);
         setJoinError(data.message);
       }
     };
-    
+
     const handleRoomClosed = (data) => {
       alert(data.message);
       exitChat();
@@ -204,7 +211,7 @@ function App({ room: initialRoom, username: initialUsername, onExit }) {
                 <div className="message-meta">
                   <p id="author">{msg.author}</p>
                   <p id="time">{msg.time}</p>
-                   {(username === msg.author || username === 'Admin') && !editingMessage && (
+                  {(username === msg.author || username === 'Admin') && !editingMessage && (
                     <div className="message-actions">
                       <button className="action-btn" onClick={() => setEditingMessage(msg.id)}>✎</button>
                       <button className="action-btn delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</button>

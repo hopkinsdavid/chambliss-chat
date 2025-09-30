@@ -129,7 +129,7 @@ function AdminPage() {
   }
 
   if (viewingRoom) {
-    return <App room={viewingRoom} username="Admin" onExit={() => setViewingRoom(null)} />;
+    return <App room={viewingRoom} username="Admin" userType="admin" onExit={() => setViewingRoom(null)} />;
   }
 
   return (

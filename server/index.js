@@ -20,9 +20,9 @@ const io = new Server(server, {
 const PORT = 3001;
 
 // --- Room Management ---
-const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: string[], messages: any[] } }
+const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: { socketId: string, userId: string, userType: string }[], messages: any[] } }
 const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const MAX_USERS_PER_ROOM = 4; // Increased to 4 to allow admin to join
+const MAX_USERS_PER_ROOM = 3; // 2 users + 1 admin
 
 // Function to clean up expired rooms
 function cleanupExpiredRooms() {
@@ -102,15 +102,44 @@ app.delete('/admin/rooms/:roomCode', (req, res) => {
 io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
-    socket.on("join_room", (roomCode) => {
+    socket.on("join_room", ({ roomCode, userId, userType }) => {
         if (activeRooms[roomCode] && activeRooms[roomCode].expiresAt > Date.now()) {
-            const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
-            if (currentRoomSize < MAX_USERS_PER_ROOM) {
+            const room = activeRooms[roomCode];
+            const existingUser = room.users.find(u => u.userId === userId);
+
+            if (existingUser) {
+                // User is rejoining, update their socketId
+                existingUser.socketId = socket.id;
                 socket.join(roomCode);
-                activeRooms[roomCode].users.push(socket.id);
-                console.log(`User with ID: ${socket.id} joined room: ${roomCode}`);
-                socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}` });
-                socket.emit("message_history", activeRooms[roomCode].messages);
+                socket.emit("room_join_status", { success: true, message: `Rejoined room ${roomCode}` });
+                socket.emit("message_history", room.messages);
+                return;
+            }
+            
+            const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
+
+            if (currentRoomSize < MAX_USERS_PER_ROOM) {
+                 if (userType === 'admin') {
+                    socket.join(roomCode);
+                    console.log(`Admin with ID: ${socket.id} joined room: ${roomCode}`);
+                    socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode} as Admin` });
+                    socket.emit("message_history", activeRooms[roomCode].messages);
+                    return;
+                }
+                
+                const nonAdminUsers = activeRooms[roomCode].users.filter(user => user.userType !== 'admin').length;
+                if (nonAdminUsers < 2) {
+                    const newUserId = userId || uuidv4();
+                    socket.join(roomCode);
+                    room.users.push({ socketId: socket.id, userId: newUserId, userType });
+    
+                    console.log(`User with ID: ${socket.id} (userId: ${newUserId}) joined room: ${roomCode}`);
+                    socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}`, userId: newUserId });
+                    socket.emit("message_history", room.messages);
+                } else {
+                     socket.emit("room_join_status", { success: false, message: "Room is full with 2 users." });
+                }
+
             } else {
                 socket.emit("room_join_status", { success: false, message: "Room is full." });
             }
@@ -133,9 +162,10 @@ io.on("connection", (socket) => {
         console.log("User Disconnected", socket.id);
         // Remove user from the room's user list upon disconnection
         for (const roomCode in activeRooms) {
-            const index = activeRooms[roomCode].users.indexOf(socket.id);
-            if (index !== -1) {
-                activeRooms[roomCode].users.splice(index, 1);
+            const userIndex = activeRooms[roomCode].users.findIndex(u => u.socketId === socket.id);
+            if (userIndex !== -1) {
+                activeRooms[roomCode].users.splice(userIndex, 1);
+                console.log(`User removed from room ${roomCode}`);
                 break;
             }
         }
