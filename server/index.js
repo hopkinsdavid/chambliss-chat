@@ -20,8 +20,8 @@ const io = new Server(server, {
 const PORT = 3001;
 
 // --- Room Management ---
-const activeRooms = {}; // Stores { roomCode: { expiresAt: Date, creatorId: string, users: { socketId: string, userId: string, userType: string }[], messages: any[] } }
-const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const activeRooms = {}; // Stores { roomCode: { ..., users: { socketId: string, userId: string, userType: string }[], ... } }
+const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
 const MAX_USERS_PER_ROOM = 3; // 2 users + 1 admin
 
 // Function to clean up expired rooms
@@ -33,31 +33,29 @@ function cleanupExpiredRooms() {
             delete activeRooms[roomCode];
         }
     }
-    // Run cleanup every hour
-    setTimeout(cleanupExpiredRooms, 60 * 60 * 1000);
+    setTimeout(cleanupExpiredRooms, 60 * 60 * 1000); // Run every hour
 }
-// Start initial cleanup
 cleanupExpiredRooms();
 
 // --- Admin API Endpoints ---
 app.post('/admin/create-room', (req, res) => {
-    const { creatorName } = req.body; // Admin can provide a name for tracking
+    const { creatorName } = req.body;
     if (!creatorName) {
         return res.status(400).json({ message: "Creator name is required." });
     }
 
     let roomCode;
     do {
-        roomCode = uuidv4().slice(0, 8); // Generate an 8-character unique code
-    } while (activeRooms[roomCode]); // Ensure uniqueness
+        roomCode = uuidv4().slice(0, 8);
+    } while (activeRooms[roomCode]);
 
     const expiresAt = Date.now() + ROOM_EXPIRATION_TIME;
     activeRooms[roomCode] = {
         expiresAt,
         creatorName,
-        createdAt: Date.now(), // For additional tracking
-        users: [], // Initialize with an empty array of users
-        messages: [], // Array to store messages
+        createdAt: Date.now(),
+        users: [],
+        messages: [],
     };
 
     console.log(`Room ${roomCode} created by ${creatorName}, expires at ${new Date(expiresAt).toLocaleString()}`);
@@ -68,7 +66,6 @@ app.get('/admin/rooms', (req, res) => {
     res.status(200).json(activeRooms);
 });
 
-// --- Endpoint to UPDATE a room ---
 app.patch('/admin/rooms/:roomCode', (req, res) => {
     const { roomCode } = req.params;
     const { creatorName } = req.body;
@@ -82,12 +79,10 @@ app.patch('/admin/rooms/:roomCode', (req, res) => {
     }
 });
 
-// --- Endpoint to DELETE a room ---
 app.delete('/admin/rooms/:roomCode', (req, res) => {
     const { roomCode } = req.params;
     if (activeRooms[roomCode]) {
         delete activeRooms[roomCode];
-        // Notify anyone in the room that it has been closed
         io.to(roomCode).emit("room_closed", { message: "This chat room has been closed by an administrator." });
         console.log(`Admin deleted room ${roomCode}`);
         res.status(200).json({ message: 'Room deleted successfully' });
@@ -103,50 +98,45 @@ io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
     socket.on("join_room", ({ roomCode, userId, userType }) => {
-        if (activeRooms[roomCode] && activeRooms[roomCode].expiresAt > Date.now()) {
-            const room = activeRooms[roomCode];
-            const existingUser = room.users.find(u => u.userId === userId);
+        // 1. Check if room is valid
+        if (!activeRooms[roomCode] || activeRooms[roomCode].expiresAt <= Date.now()) {
+            socket.emit("room_join_status", { success: false, message: "Room is invalid or has expired." });
+            return;
+        }
 
-            if (existingUser) {
-                // User is rejoining, update their socketId
-                existingUser.socketId = socket.id;
-                socket.join(roomCode);
-                socket.emit("room_join_status", { success: true, message: `Rejoined room ${roomCode}` });
-                socket.emit("message_history", room.messages);
+        const room = activeRooms[roomCode];
+        const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
+        const existingUser = room.users.find(u => u.userId === userId);
+
+        // 2. Check for hard connection limit first
+        if (currentRoomSize >= MAX_USERS_PER_ROOM) {
+            socket.emit("room_join_status", { success: false, message: "Room is full." });
+            return;
+        }
+        
+        // 3. Check for business logic (2 non-admin users) only if it's a NEW user
+        if (!existingUser) {
+            const nonAdminUsers = room.users.filter(user => user.userType !== 'admin').length;
+            if (userType !== 'admin' && nonAdminUsers >= 2) {
+                socket.emit("room_join_status", { success: false, message: "Room is already full with 2 users." });
                 return;
             }
-            
-            const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
-
-            if (currentRoomSize < MAX_USERS_PER_ROOM) {
-                 if (userType === 'admin') {
-                    socket.join(roomCode);
-                    console.log(`Admin with ID: ${socket.id} joined room: ${roomCode}`);
-                    socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode} as Admin` });
-                    socket.emit("message_history", activeRooms[roomCode].messages);
-                    return;
-                }
-                
-                const nonAdminUsers = activeRooms[roomCode].users.filter(user => user.userType !== 'admin').length;
-                if (nonAdminUsers < 2) {
-                    const newUserId = userId || uuidv4();
-                    socket.join(roomCode);
-                    room.users.push({ socketId: socket.id, userId: newUserId, userType });
-    
-                    console.log(`User with ID: ${socket.id} (userId: ${newUserId}) joined room: ${roomCode}`);
-                    socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}`, userId: newUserId });
-                    socket.emit("message_history", room.messages);
-                } else {
-                     socket.emit("room_join_status", { success: false, message: "Room is full with 2 users." });
-                }
-
-            } else {
-                socket.emit("room_join_status", { success: false, message: "Room is full." });
-            }
-        } else {
-            console.log(`User with ID: ${socket.id} tried to join expired/invalid room: ${roomCode}`);
-            socket.emit("room_join_status", { success: false, message: "Room is invalid or has expired." });
         }
+        
+        // 4. If all checks pass, let the user join
+        socket.join(roomCode);
+
+        if (existingUser) {
+            existingUser.socketId = socket.id; // Update socket ID on rejoin
+            socket.emit("room_join_status", { success: true, message: `Rejoined room ${roomCode}` });
+        } else {
+            const newUserId = userId || uuidv4();
+            room.users.push({ socketId: socket.id, userId: newUserId, userType });
+            socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}`, userId: newUserId });
+        }
+        
+        console.log(`User with ID: ${socket.id} (userId: ${userId}) joined room: ${roomCode}`);
+        socket.emit("message_history", room.messages);
     });
 
     socket.on("send_message", (data) => {
@@ -160,10 +150,10 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", () => {
         console.log("User Disconnected", socket.id);
-        // Remove user from the room's user list upon disconnection
         for (const roomCode in activeRooms) {
             const userIndex = activeRooms[roomCode].users.findIndex(u => u.socketId === socket.id);
             if (userIndex !== -1) {
+                // Instead of removing completely, we just nullify the socketId
                 activeRooms[roomCode].users.splice(userIndex, 1);
                 console.log(`User removed from room ${roomCode}`);
                 break;
@@ -173,7 +163,6 @@ io.on("connection", (socket) => {
 
     socket.on("update_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
-            // Broadcast the message update to others in the room
             const messageIndex = activeRooms[data.room].messages.findIndex(msg => msg.id === data.id);
             if (messageIndex !== -1) {
                 activeRooms[data.room].messages[messageIndex].message = data.message;
@@ -185,7 +174,6 @@ io.on("connection", (socket) => {
     socket.on("delete_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
             activeRooms[data.room].messages = activeRooms[data.room].messages.filter(msg => msg.id !== data.id);
-            // Broadcast the message deletion to others in the room
             socket.to(data.room).emit("message_deleted", { id: data.id });
         }
     });
