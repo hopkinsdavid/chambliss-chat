@@ -22,7 +22,7 @@ const PORT = 3001;
 // --- Room Management ---
 const activeRooms = {}; // Stores { roomCode: { ..., users: { socketId: string, userId: string, userType: string }[], ... } }
 const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
-const MAX_USERS_PER_ROOM = 3; // 2 users + 1 admin
+const MAX_USERS_PER_ROOM = 6; 
 
 // Function to clean up expired rooms
 function cleanupExpiredRooms() {
@@ -114,7 +114,7 @@ io.on("connection", (socket) => {
             return;
         }
         
-        // 3. Check for business logic (2 non-admin users) only if it's a NEW user
+        // 3. Check for business logic (2 non-admin users) only if it's a NEW user// recheck this asap. 
         if (!existingUser) {
             const nonAdminUsers = room.users.filter(user => user.userType !== 'admin').length;
             if (userType !== 'admin' && nonAdminUsers >= 2) {
