@@ -3,28 +3,25 @@ const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid'); // For generating unique IDs
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // To parse JSON bodies from admin API calls
+app.use(express.json());
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173", // Your React app's address
-        methods: ["GET", "POST"]
+        origin: "http://localhost:5173",
+        methods: ["GET", "POST", "PATCH", "DELETE"]
     }
 });
 
 const PORT = 3001;
 
-// --- Room Management ---
-const activeRooms = {}; // Stores { roomCode: { ..., users: { socketId: string, userId: string, userType: string }[], ... } }
-const ROOM_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
-const MAX_USERS_PER_ROOM = 6; 
+const activeRooms = {};
+const MAX_USERS_PER_ROOM = 6;
 
-// Function to clean up expired rooms
 function cleanupExpiredRooms() {
     const now = Date.now();
     for (const roomCode in activeRooms) {
@@ -33,13 +30,12 @@ function cleanupExpiredRooms() {
             delete activeRooms[roomCode];
         }
     }
-    setTimeout(cleanupExpiredRooms, 60 * 60 * 1000); // Run every hour
+    setTimeout(cleanupExpiredRooms, 60 * 60 * 1000);
 }
 cleanupExpiredRooms();
 
-// --- Admin API Endpoints ---
 app.post('/admin/create-room', (req, res) => {
-    const { creatorName } = req.body;
+    const { creatorName, expirationHours } = req.body;
     if (!creatorName) {
         return res.status(400).json({ message: "Creator name is required." });
     }
@@ -49,7 +45,8 @@ app.post('/admin/create-room', (req, res) => {
         roomCode = uuidv4().slice(0, 8);
     } while (activeRooms[roomCode]);
 
-    const expiresAt = Date.now() + ROOM_EXPIRATION_TIME;
+    const roomExpirationTime = (expirationHours || 24) * 60 * 60 * 1000;
+    const expiresAt = Date.now() + roomExpirationTime;
     activeRooms[roomCode] = {
         expiresAt,
         creatorName,
@@ -58,7 +55,7 @@ app.post('/admin/create-room', (req, res) => {
         messages: [],
     };
 
-    console.log(`Room ${roomCode} created by ${creatorName}, expires at ${new Date(expiresAt).toLocaleString()}`);
+    console.log(`Room ${roomCode} created by ${creatorName}, expires in ${expirationHours || 24} hours at ${new Date(expiresAt).toLocaleString()}`);
     res.status(201).json({ roomCode, expiresAt: new Date(expiresAt).toLocaleString() });
 });
 
@@ -79,6 +76,22 @@ app.patch('/admin/rooms/:roomCode', (req, res) => {
     }
 });
 
+app.patch('/admin/rooms/:roomCode/extend', (req, res) => {
+    const { roomCode } = req.params;
+    const { hours } = req.body;
+
+    if (activeRooms[roomCode] && hours > 0) {
+        const extensionMillis = hours * 60 * 60 * 1000;
+        activeRooms[roomCode].expiresAt += extensionMillis;
+        console.log(`Admin extended room ${roomCode} by ${hours} hours. New expiry: ${new Date(activeRooms[roomCode].expiresAt).toLocaleString()}`);
+        res.status(200).json({ message: 'Room extended successfully', room: activeRooms[roomCode] });
+    } else if (!activeRooms[roomCode]) {
+        res.status(404).json({ message: 'Room not found' });
+    } else {
+        res.status(400).json({ message: 'Invalid number of hours' });
+    }
+});
+
 app.delete('/admin/rooms/:roomCode', (req, res) => {
     const { roomCode } = req.params;
     if (activeRooms[roomCode]) {
@@ -91,14 +104,10 @@ app.delete('/admin/rooms/:roomCode', (req, res) => {
     }
 });
 
-
-
-// --- Socket.IO Connection Handling ---
 io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
     socket.on("join_room", ({ roomCode, userId, userType }) => {
-        // 1. Check if room is valid
         if (!activeRooms[roomCode] || activeRooms[roomCode].expiresAt <= Date.now()) {
             socket.emit("room_join_status", { success: false, message: "Room is invalid or has expired." });
             return;
@@ -108,13 +117,11 @@ io.on("connection", (socket) => {
         const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
         const existingUser = room.users.find(u => u.userId === userId);
 
-        // 2. Check for hard connection limit first
         if (currentRoomSize >= MAX_USERS_PER_ROOM) {
             socket.emit("room_join_status", { success: false, message: "Room is full." });
             return;
         }
         
-        // 3. Check for business logic (2 non-admin users) only if it's a NEW user// recheck this asap. 
         if (!existingUser) {
             const nonAdminUsers = room.users.filter(user => user.userType !== 'admin').length;
             if (userType !== 'admin' && nonAdminUsers >= 2) {
@@ -123,11 +130,10 @@ io.on("connection", (socket) => {
             }
         }
         
-        // 4. If all checks pass, let the user join
         socket.join(roomCode);
 
         if (existingUser) {
-            existingUser.socketId = socket.id; // Update socket ID on rejoin
+            existingUser.socketId = socket.id;
             socket.emit("room_join_status", { success: true, message: `Rejoined room ${roomCode}` });
         } else {
             const newUserId = userId || uuidv4();
@@ -153,7 +159,6 @@ io.on("connection", (socket) => {
         for (const roomCode in activeRooms) {
             const userIndex = activeRooms[roomCode].users.findIndex(u => u.socketId === socket.id);
             if (userIndex !== -1) {
-                // Instead of removing completely, we just nullify the socketId
                 activeRooms[roomCode].users.splice(userIndex, 1);
                 console.log(`User removed from room ${roomCode}`);
                 break;

@@ -1,20 +1,23 @@
 // client/src/AdminPage.jsx
 import React, { useState, useEffect } from 'react';
-import './AdminPage.css'; // We'll create this next
+import './AdminPage.css';
 import ChamblissLogo from '/cchorizontal.png';
-import App from './App'; // Import the App component
-import LoginPage from './LoginPage'; // Import the LoginPage component
+import App from './App';
+import LoginPage from './LoginPage';
 
 function AdminPage() {
-  const [creatorName, setCreatorName] = useState("Chambliss Admin"); // Default name
+  const [creatorName, setCreatorName] = useState("Chambliss Admin");
   const [newRoomCode, setNewRoomCode] = useState("");
   const [newRoomExpiry, setNewRoomExpiry] = useState("");
   const [activeRooms, setActiveRooms] = useState({});
   const [message, setMessage] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Set to false initially
-  const [editingRoomCode, setEditingRoomCode] = useState(null); // Track which room is being edited
-  const [editCreatorName, setEditCreatorName] = useState(""); // Temp state for editing creator name
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [editingRoomCode, setEditingRoomCode] = useState(null);
+  const [editCreatorName, setEditCreatorName] = useState("");
   const [viewingRoom, setViewingRoom] = useState(null);
+  const [expirationHours, setExpirationHours] = useState(24);
+  const [extendingRoomCode, setExtendingRoomCode] = useState(null); // To track which room is being extended
+  const [extensionHours, setExtensionHours] = useState(1); // Default extension time
 
   const fetchRooms = async () => {
     try {
@@ -31,14 +34,14 @@ function AdminPage() {
   };
 
   const createRoom = async () => {
-    setMessage(""); // Clear previous messages
+    setMessage("");
     try {
       const response = await fetch('http://localhost:3001/admin/create-room', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ creatorName }),
+        body: JSON.stringify({ creatorName, expirationHours }),
       });
 
       if (response.ok) {
@@ -46,7 +49,7 @@ function AdminPage() {
         setNewRoomCode(data.roomCode);
         setNewRoomExpiry(data.expiresAt);
         setMessage(`Room ${data.roomCode} created successfully! Expires: ${data.expiresAt}`);
-        fetchRooms(); // Refresh the list of active rooms
+        fetchRooms();
       } else {
         const errorData = await response.json();
         setMessage(`Failed to create room: ${errorData.message || response.statusText}`);
@@ -56,14 +59,13 @@ function AdminPage() {
     }
   };
 
-  // Function to handle deleting a room
   const handleDeleteRoom = async (roomCode) => {
       if (window.confirm(`Are you sure you want to delete room ${roomCode}?`)) {
           try {
               const response = await fetch(`http://localhost:3001/admin/rooms/${roomCode}`, { method: 'DELETE' });
               if (response.ok) {
                   setMessage(`Room ${roomCode} deleted successfully.`);
-                  fetchRooms(); // Refresh the list
+                  fetchRooms();
               } else {
                   setMessage("Failed to delete room.");
               }
@@ -73,7 +75,6 @@ function AdminPage() {
       }
   };
 
-  // Function to handle updating a room
   const handleUpdateRoom = async (roomCode) => {
       try {
           const response = await fetch(`http://localhost:3001/admin/rooms/${roomCode}`, {
@@ -84,8 +85,8 @@ function AdminPage() {
 
           if (response.ok) {
               setMessage(`Room ${roomCode} updated.`);
-              setEditingRoomCode(null); // Exit edit mode
-              fetchRooms(); // Refresh the list
+              setEditingRoomCode(null);
+              fetchRooms();
           } else {
               setMessage("Failed to update room.");
           }
@@ -94,32 +95,55 @@ function AdminPage() {
       }
   };
 
-  // Function to enter edit mode
+  const handleExtendRoom = async (roomCode) => {
+    try {
+        const response = await fetch(`http://localhost:3001/admin/rooms/${roomCode}/extend`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hours: extensionHours })
+        });
+
+        if (response.ok) {
+            setMessage(`Room ${roomCode} extended by ${extensionHours} hours.`);
+            setExtendingRoomCode(null); // Exit extension mode
+            fetchRooms(); // Refresh the list
+        } else {
+            setMessage("Failed to extend room.");
+        }
+    } catch (error) {
+        setMessage("Error extending room.");
+    }
+  };
+
   const startEditing = (room) => {
         setEditingRoomCode(room.code);
         setEditCreatorName(room.data.creatorName);
-    };
+        setExtendingRoomCode(null);
+  };
 
-    useEffect(() => {
-      if (isAuthenticated) {
-        fetchRooms();
-        const interval = setInterval(fetchRooms, 30000); // Refresh every 30 seconds
-        return () => clearInterval(interval);
-      }
-    }, [isAuthenticated]);
+  const startExtending = (roomCode) => {
+    setExtendingRoomCode(roomCode);
+    setEditingRoomCode(null);
+  };
 
-  // its not working rn. its supposed to show expired in the admin page. okay its somewhat working
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchRooms();
+      const interval = setInterval(fetchRooms, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
+
   const getExpiryStatus = (expiresAt) => {
     const expiryDate = new Date(expiresAt);
     const now = new Date();
     if (expiryDate < now) {
         return <span style={{ color: 'red', fontWeight: 'bold' }}>Expired</span>;
     }
-    // switch the expiry date here
     const diffHours = Math.round((expiryDate - now) / (1000 * 60 * 60));
     return `Expires in ~${diffHours} hours`;
   };
-  
+
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
   };
@@ -149,6 +173,22 @@ function AdminPage() {
                 value={creatorName}
                 onChange={(e) => setCreatorName(e.target.value)}
                 placeholder="e.g., Jane Doe"
+            />
+        </div>
+        <div className="input-group">
+            <label htmlFor="expirationHours">Expires in (hours):</label>
+            <input
+                id="expirationHours"
+                type="number"
+                value={expirationHours}
+                onChange={(e) => {
+                    const hours = parseInt(e.target.value, 10);
+                    if (hours > 0) {
+                        setExpirationHours(hours);
+                    }
+                }}
+                min="0"
+                placeholder="e.g., 24"
             />
         </div>
         <button onClick={createRoom}>Generate Room Code</button>
@@ -197,10 +237,26 @@ function AdminPage() {
                                     <button className="save-btn" onClick={() => handleUpdateRoom(code)}>Save</button>
                                     <button className="cancel-btn" onClick={() => setEditingRoomCode(null)}>Cancel</button>
                                 </>
+                            ) : extendingRoomCode === code ? (
+                                <>
+                                    <input
+                                        type="number"
+                                        value={extensionHours}
+                                        onChange={(e) => {
+                                            const hours = parseInt(e.target.value, 10);
+                                            if (hours > 0) setExtensionHours(hours);
+                                        }}
+                                        min="0"
+                                        style={{ width: '50px', marginRight: '5px' }}
+                                    />
+                                    <button className="save-btn" onClick={() => handleExtendRoom(code)}>Confirm</button>
+                                    <button className="cancel-btn" onClick={() => setExtendingRoomCode(null)}>Cancel</button>
+                                </>
                             ) : (
                                 <>
                                     <button className="view-btn" onClick={() => setViewingRoom(code)}>View</button>
                                     <button className="edit-btn" onClick={() => startEditing({ code, data })}>Edit</button>
+                                    <button className="extend-btn" onClick={() => startExtending(code)}>Extend</button>
                                     <button className="delete-btn" onClick={() => handleDeleteRoom(code)}>Delete</button>
                                 </>
                             )}
