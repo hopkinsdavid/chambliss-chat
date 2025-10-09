@@ -22,6 +22,12 @@ const PORT = 3001;
 const activeRooms = {};
 const MAX_USERS_PER_ROOM = 6;
 
+//Santize Input 
+const sanitizeInput = (str) => {
+    if (typeof str !== 'string') return str;
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
+
 function cleanupExpiredRooms() {
     const now = Date.now();
     for (const roomCode in activeRooms) {
@@ -49,13 +55,13 @@ app.post('/admin/create-room', (req, res) => {
     const expiresAt = Date.now() + roomExpirationTime;
     activeRooms[roomCode] = {
         expiresAt,
-        creatorName,
+        creatorName : sanitizeInput(creatorName),
         createdAt: Date.now(),
         users: [],
         messages: [],
     };
 
-    console.log(`Room ${roomCode} created by ${creatorName}, expires in ${expirationHours || 24} hours at ${new Date(expiresAt).toLocaleString()}`);
+    console.log(`Room ${roomCode} created by ${sanitizeInput(creatorName)}, expires in ${expirationHours || 24} hours at ${new Date(expiresAt).toLocaleString()}`);
     res.status(201).json({ roomCode, expiresAt: new Date(expiresAt).toLocaleString() });
 });
 
@@ -68,8 +74,8 @@ app.patch('/admin/rooms/:roomCode', (req, res) => {
     const { creatorName } = req.body;
 
     if (activeRooms[roomCode]) {
-        activeRooms[roomCode].creatorName = creatorName;
-        console.log(`Admin updated room ${roomCode}. New creator: ${creatorName}`);
+        activeRooms[roomCode].creatorName = sanitizeInput(creatorName);
+        console.log(`Admin updated room ${roomCode}. New creator: ${sanitizeInput(creatorName)}`);
         res.status(200).json({ message: 'Room updated successfully', room: activeRooms[roomCode] });
     } else {
         res.status(404).json({ message: 'Room not found' });
@@ -147,8 +153,18 @@ io.on("connection", (socket) => {
 
     socket.on("send_message", (data) => {
         if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
-            activeRooms[data.room].messages.push(data);
-            socket.to(data.room).emit("receive_message", data);
+            // Create a sanitized version of the message data
+            const sanitizedData = {
+                ...data,
+                author: sanitizeInput(data.author),
+                message: sanitizeInput(data.message),
+            };
+
+            // Push the sanitized data to the message history
+            activeRooms[data.room].messages.push(sanitizedData);
+            
+            // Broadcast the sanitized data to other users in the room
+            socket.to(data.room).emit("receive_message", sanitizedData);
         } else {
             socket.emit("room_join_status", { success: false, message: "Cannot send message: Room is invalid or has expired." });
         }
