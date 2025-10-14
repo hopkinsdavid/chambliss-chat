@@ -61,8 +61,13 @@ app.post('/admin/create-room', (req, res) => {
         messages: [],
     };
 
-    console.log(`Room ${roomCode} created by ${sanitizeInput(creatorName)}, expires in ${expirationHours || 24} hours at ${new Date(expiresAt).toLocaleString()}`);
-    res.status(201).json({ roomCode, expiresAt: new Date(expiresAt).toLocaleString() });
+    const sponsorCode = `s${roomCode}`;
+    console.log(`Room ${roomCode} created by ${sanitizeInput(creatorName)}. Sponsor code: ${sponsorCode}`);
+    res.status(201).json({ 
+        recipientCode: roomCode, 
+        sponsorCode: sponsorCode,
+        expiresAt: new Date(expiresAt).toLocaleString() 
+    });
 });
 
 app.get('/admin/rooms', (req, res) => {
@@ -114,59 +119,64 @@ io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
     socket.on("join_room", ({ roomCode, userId, userType }) => {
-        if (!activeRooms[roomCode] || activeRooms[roomCode].expiresAt <= Date.now()) {
+        const isSponsor = roomCode.startsWith('s');
+        const baseRoomCode = isSponsor ? roomCode.substring(1) : roomCode;
+        
+        let authorName = userType === 'admin' ? 'Admin' : (isSponsor ? 'Sponsor' : 'Recipient');
+
+        if (!activeRooms[baseRoomCode] || activeRooms[baseRoomCode].expiresAt <= Date.now()) {
             socket.emit("room_join_status", { success: false, message: "Room is invalid or has expired." });
             return;
         }
 
-        const room = activeRooms[roomCode];
-        const currentRoomSize = io.sockets.adapter.rooms.get(roomCode)?.size || 0;
+        const room = activeRooms[baseRoomCode];
+        
+        const currentRoomSize = io.sockets.adapter.rooms.get(baseRoomCode)?.size || 0;
         const existingUser = room.users.find(u => u.userId === userId);
 
-        if (currentRoomSize >= MAX_USERS_PER_ROOM) {
+        if (!existingUser && currentRoomSize >= MAX_USERS_PER_ROOM) {
             socket.emit("room_join_status", { success: false, message: "Room is full." });
             return;
         }
-        
-        if (!existingUser) {
-            const nonAdminUsers = room.users.filter(user => user.userType !== 'admin').length;
-            if (userType !== 'admin' && nonAdminUsers >= 2) {
-                socket.emit("room_join_status", { success: false, message: "Room is already full with 2 users." });
-                return;
-            }
+
+        const nonAdminUsers = room.users.filter(user => user.userType !== 'admin' && user.userId !== userId).length;
+        if (userType !== 'admin' && nonAdminUsers >= 2) {
+             socket.emit("room_join_status", { success: false, message: "Room is already full with 2 users." });
+             return;
         }
         
-        socket.join(roomCode);
-
+        socket.join(baseRoomCode);
+        
         if (existingUser) {
             existingUser.socketId = socket.id;
-            socket.emit("room_join_status", { success: true, message: `Rejoined room ${roomCode}` });
+            existingUser.authorName = authorName; // Update authorName on rejoin
+            socket.emit("room_join_status", { success: true, message: `Rejoined room ${baseRoomCode}` });
         } else {
             const newUserId = userId || uuidv4();
-            room.users.push({ socketId: socket.id, userId: newUserId, userType });
-            socket.emit("room_join_status", { success: true, message: `Joined room ${roomCode}`, userId: newUserId });
+            room.users.push({ socketId: socket.id, userId: newUserId, userType, authorName });
+            socket.emit("room_join_status", { success: true, message: `Joined room ${baseRoomCode}`, userId: newUserId });
         }
         
-        console.log(`User with ID: ${socket.id} (userId: ${userId}) joined room: ${roomCode}`);
+        console.log(`User ${socket.id} joined room ${baseRoomCode} as ${authorName}`);
         socket.emit("message_history", room.messages);
     });
 
     socket.on("send_message", (data) => {
-        if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
-            // Create a sanitized version of the message data
+        const baseRoomCode = data.room.startsWith('s') ? data.room.substring(1) : data.room;
+
+        if (activeRooms[baseRoomCode] && activeRooms[baseRoomCode].expiresAt > Date.now()) {
+            const user = activeRooms[baseRoomCode].users.find(u => u.socketId === socket.id);
+            if (!user) return; 
+
             const sanitizedData = {
                 ...data,
-                author: sanitizeInput(data.author),
+                author: user.authorName, // IMPORTANT: Override with server-assigned name
                 message: sanitizeInput(data.message),
             };
 
-            // Push the sanitized data to the message history
-            activeRooms[data.room].messages.push(sanitizedData);
+            activeRooms[baseRoomCode].messages.push(sanitizedData);
             
-            // Broadcast the sanitized data to other users in the room
-            socket.to(data.room).emit("receive_message", sanitizedData);
-        } else {
-            socket.emit("room_join_status", { success: false, message: "Cannot send message: Room is invalid or has expired." });
+            io.to(baseRoomCode).emit("receive_message", sanitizedData);
         }
     });
 
@@ -183,19 +193,21 @@ io.on("connection", (socket) => {
     });
 
     socket.on("update_message", (data) => {
-        if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
-            const messageIndex = activeRooms[data.room].messages.findIndex(msg => msg.id === data.id);
+        const baseRoomCode = data.room.startsWith('s') ? data.room.substring(1) : data.room;
+        if (activeRooms[baseRoomCode] && activeRooms[baseRoomCode].expiresAt > Date.now()) {
+            const messageIndex = activeRooms[baseRoomCode].messages.findIndex(msg => msg.id === data.id);
             if (messageIndex !== -1) {
-                activeRooms[data.room].messages[messageIndex].message = data.message;
+                activeRooms[baseRoomCode].messages[messageIndex].message = data.message;
             }
-            socket.to(data.room).emit("message_updated", { id: data.id, message: data.message });
+            socket.to(baseRoomCode).emit("message_updated", { id: data.id, message: data.message });
         }
     });
 
     socket.on("delete_message", (data) => {
-        if (activeRooms[data.room] && activeRooms[data.room].expiresAt > Date.now()) {
-            activeRooms[data.room].messages = activeRooms[data.room].messages.filter(msg => msg.id !== data.id);
-            socket.to(data.room).emit("message_deleted", { id: data.id });
+        const baseRoomCode = data.room.startsWith('s') ? data.room.substring(1) : data.room;
+        if (activeRooms[baseRoomCode] && activeRooms[baseRoomCode].expiresAt > Date.now()) {
+            activeRooms[baseRoomCode].messages = activeRooms[baseRoomCode].messages.filter(msg => msg.id !== data.id);
+            io.to(baseRoomCode).emit("message_deleted", { id: data.id });
         }
     });
     

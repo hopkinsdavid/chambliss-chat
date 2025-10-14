@@ -37,12 +37,12 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
       const messageData = {
         id: uuidv4(), // Add a unique ID
         room: room,
-        author: username,
+        author: username, // This name is for reference, server will override it
         message: message,
         time: new Date(Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       socket.emit("send_message", messageData);
-      setMessageList((list) => [...list, messageData]);
+      // REMOVED: Optimistic update is removed. We wait for server confirmation.
       setMessage("");
     }
   };
@@ -67,8 +67,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
 
   const deleteMessage = (id) => {
     socket.emit("delete_message", { id, room });
-    // Remove the message from the local state
-    setMessageList((list) => list.filter((msg) => msg.id !== id));
+    // Local state will be updated by the "message_deleted" event from the server
   };
 
 
@@ -85,7 +84,10 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
 
   useEffect(() => {
     const handleReceiveMessage = (data) => {
-      setMessageList((list) => [...list, data]);
+      // Check if message with same ID already exists to prevent duplicates
+      setMessageList((list) => 
+        list.some(msg => msg.id === data.id) ? list : [...list, data]
+      );
     };
 
     const handleRoomJoinStatus = (data) => {
@@ -180,7 +182,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
       ) : (
         <div className="chat-window">
           <div className="chat-header">
-            <p>Live Chat - Room: {room}</p>
+            <p>Live Chat - Room: {room.startsWith('s') ? room.substring(1) : room}</p>
             <button onClick={exitChat} className="exit-btn">{onExit ? 'Back to Admin' : 'Exit'}</button>
           </div>
           <div className="chat-body" ref={chatBodyRef}>
@@ -188,7 +190,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
               <div
                 key={msg.id}
                 className="message-container"
-                id={username === msg.author ? "you" : "other"}
+                id={username === msg.author || (username === 'Admin' && msg.author === 'Admin') || (username !== 'Admin' && username.toLowerCase() === msg.author.toLowerCase()) ? "you" : "other"}
               >
                 <div className="message-content">
                   {editingMessage === msg.id ? (

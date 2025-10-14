@@ -7,7 +7,8 @@ import LoginPage from './LoginPage';
 
 function AdminPage() {
   const [creatorName, setCreatorName] = useState("Chambliss Admin");
-  const [newRoomCode, setNewRoomCode] = useState("");
+  const [newSponsorCode, setNewSponsorCode] = useState("");
+  const [newRecipientCode, setNewRecipientCode] = useState("");
   const [newRoomExpiry, setNewRoomExpiry] = useState("");
   const [activeRooms, setActiveRooms] = useState({});
   const [message, setMessage] = useState("");
@@ -16,8 +17,8 @@ function AdminPage() {
   const [editCreatorName, setEditCreatorName] = useState("");
   const [viewingRoom, setViewingRoom] = useState(null);
   const [expirationHours, setExpirationHours] = useState(24);
-  const [extendingRoomCode, setExtendingRoomCode] = useState(null); // To track which room is being extended
-  const [extensionHours, setExtensionHours] = useState(1); // Default extension time
+  const [extendingRoomCode, setExtendingRoomCode] = useState(null);
+  const [extensionHours, setExtensionHours] = useState(1);
 
   const fetchRooms = async () => {
     try {
@@ -46,9 +47,10 @@ function AdminPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setNewRoomCode(data.roomCode);
+        setNewSponsorCode(data.sponsorCode);
+        setNewRecipientCode(data.recipientCode);
         setNewRoomExpiry(data.expiresAt);
-        setMessage(`Room ${data.roomCode} created successfully! Expires: ${data.expiresAt}`);
+        setMessage(`Room ${data.recipientCode} created successfully!`);
         fetchRooms();
       } else {
         const errorData = await response.json();
@@ -191,13 +193,14 @@ function AdminPage() {
                 placeholder="e.g., 24"
             />
         </div>
-        <button onClick={createRoom}>Generate Room Code</button>
+        <button onClick={createRoom}>Generate Room Codes</button>
         {message && <p className="admin-message">{message}</p>}
-        {newRoomCode && (
+        {newSponsorCode && (
           <div className="generated-code">
-            <p>New Room Code: <strong className="room-code-display">{newRoomCode}</strong></p>
+            <p>Sponsor Code: <strong className="room-code-display">{newSponsorCode}</strong></p>
+            <p>Recipient Code: <strong className="room-code-display">{newRecipientCode}</strong></p>
             <p>Expires: {newRoomExpiry}</p>
-            <p>Share this code with the Donor and Recipient.</p>
+            <p>Share these codes with the correct individuals.</p>
           </div>
         )}
       </div>
