@@ -10,8 +10,10 @@ function LoginPage({ onLoginSuccess }) {
 
   const handleLogin = () => {
 
-    // TEMPORARY!!!! SWITCH THIS
-    if (username === 'admin' && password === 'password') {
+    const correctUsername = import.meta.env.VITE_ADMIN_USERNAME;
+    const correctPassword = import.meta.env.VITE_ADMIN_PASSWORD;
+
+    if (username === correctUsername && password === correctPassword) {
       onLoginSuccess();
     } else {
       setError('Invalid username or password');
