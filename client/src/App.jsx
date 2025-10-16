@@ -3,73 +3,64 @@ import { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 import ChamblissLogo from '/ccvertical.png';
-import { v4 as uuidv4 } from 'uuid'; // Import uuid
+import { v4 as uuidv4 } from 'uuid';
 
 const socket = io.connect("http://localhost:3001");
 
 function App({ room: initialRoom, username: initialUsername, userType = 'user', onExit }) {
-  const [username, setUsername] = useState(initialUsername || "");
+  const [authorName, setAuthorName] = useState(initialUsername || ""); 
   const [room, setRoom] = useState(initialRoom || "");
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
-  const [hasJoined, setHasJoined] = useState(!!(initialRoom && initialUsername));
+  const [hasJoined, setHasJoined] = useState(!!initialRoom); 
   const [joinError, setJoinError] = useState("");
-  const [editingMessage, setEditingMessage] = useState(null); // Track which message is being edited
-  const [userId, setUserId] = useState(localStorage.getItem('userId')); // For session persistence
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [userId, setUserId] = useState(localStorage.getItem('userId'));
 
   const chatBodyRef = useRef(null);
 
   const joinRoom = () => {
-    if (username !== "" && room !== "") {
-      // Pass userId and userType when joining a room
+    if (room !== "") {
       socket.emit("join_room", { roomCode: room, userId, userType });
     }
   };
 
   useEffect(() => {
-    if (initialRoom && initialUsername) {
+    if (initialRoom) {
       joinRoom();
     }
-  }, [initialRoom, initialUsername]);
+  }, [initialRoom]);
 
   const sendMessage = () => {
     if (message.trim() !== "") {
       const messageData = {
-        id: uuidv4(), // Add a unique ID
+        id: uuidv4(),
         room: room,
-        author: username, // This name is for reference, server will override it
+        author: authorName, 
         message: message,
         time: new Date(Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       socket.emit("send_message", messageData);
-      // REMOVED: Optimistic update is removed. We wait for server confirmation.
       setMessage("");
     }
   };
 
   const updateMessage = (id, newMessage) => {
     if (newMessage.trim() === "") {
-      deleteMessage(id); // If the edited message is empty, delete it
+      deleteMessage(id);
       return;
     }
-    const messageData = {
-      id: id,
-      room: room,
-      message: newMessage,
-    };
+    const messageData = { id, room, message: newMessage };
     socket.emit("update_message", messageData);
-    // Update the message in the local state
     setMessageList((list) =>
       list.map((msg) => (msg.id === id ? { ...msg, message: newMessage } : msg))
     );
-    setEditingMessage(null); // Exit editing mode
+    setEditingMessage(null);
   };
 
   const deleteMessage = (id) => {
     socket.emit("delete_message", { id, room });
-    // Local state will be updated by the "message_deleted" event from the server
   };
-
 
   const exitChat = () => {
     if (onExit) {
@@ -77,15 +68,14 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
     } else {
       setHasJoined(false);
       setRoom("");
-      setUsername("");
+      setAuthorName(""); 
       setMessageList([]);
     }
   };
 
   useEffect(() => {
     const handleReceiveMessage = (data) => {
-      // Check if message with same ID already exists to prevent duplicates
-      setMessageList((list) => 
+      setMessageList((list) =>
         list.some(msg => msg.id === data.id) ? list : [...list, data]
       );
     };
@@ -94,8 +84,10 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
       if (data.success) {
         setHasJoined(true);
         setJoinError("");
+        if (data.authorName) {
+            setAuthorName(data.authorName);
+        }
         if (data.userId) {
-          // Save the userId to localStorage for session persistence
           localStorage.setItem('userId', data.userId);
           setUserId(data.userId);
         }
@@ -126,14 +118,12 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
       setMessageList(history);
     }
 
-
     socket.on("receive_message", handleReceiveMessage);
     socket.on("room_join_status", handleRoomJoinStatus);
     socket.on("room_closed", handleRoomClosed);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("message_history", handleMessageHistory);
-
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -143,7 +133,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("message_history", handleMessageHistory);
     };
-  }, [socket]);
+  }, [socket]); // Dependency array is correct
 
   useEffect(() => {
     if (chatBodyRef.current) {
@@ -151,22 +141,13 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
     }
   }, [messageList]);
 
-
   return (
     <div className="App">
       {!hasJoined ? (
         <div className="joinChatContainer">
           <img src={ChamblissLogo} alt="Chambliss Center Logo" />
           <h3>Hey there, join a Chat!</h3>
-          <input
-            type="text"
-            placeholder="Your Name..."
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            onKeyPress={(event) => {
-              event.key === "Enter" && joinRoom();
-            }}
-          />
+          {/* This input is correctly removed */}
           <input
             type="text"
             placeholder="Room Code..."
@@ -190,7 +171,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
               <div
                 key={msg.id}
                 className="message-container"
-                id={username === msg.author || (username === 'Admin' && msg.author === 'Admin') || (username !== 'Admin' && username.toLowerCase() === msg.author.toLowerCase()) ? "you" : "other"}
+                id={authorName === msg.author ? "you" : "other"}
               >
                 <div className="message-content">
                   {editingMessage === msg.id ? (
@@ -213,7 +194,7 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
                 <div className="message-meta">
                   <p id="author">{msg.author}</p>
                   <p id="time">{msg.time}</p>
-                  {(username === msg.author || username === 'Admin') && !editingMessage && (
+                  {(authorName === msg.author || authorName === 'Admin') && !editingMessage && (
                     <div className="message-actions">
                       <button className="action-btn" onClick={() => setEditingMessage(msg.id)}>✎</button>
                       <button className="action-btn delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</button>

@@ -150,11 +150,11 @@ io.on("connection", (socket) => {
         if (existingUser) {
             existingUser.socketId = socket.id;
             existingUser.authorName = authorName; // Update authorName on rejoin
-            socket.emit("room_join_status", { success: true, message: `Rejoined room ${baseRoomCode}` });
+            socket.emit("room_join_status", { success: true, message: `Rejoined room ${baseRoomCode}`, authorName: authorName, userId: existingUser.userId });
         } else {
             const newUserId = userId || uuidv4();
             room.users.push({ socketId: socket.id, userId: newUserId, userType, authorName });
-            socket.emit("room_join_status", { success: true, message: `Joined room ${baseRoomCode}`, userId: newUserId });
+            socket.emit("room_join_status", { success: true, message: `Joined room ${baseRoomCode}`, userId: newUserId , authorName: authorName });
         }
         
         console.log(`User ${socket.id} joined room ${baseRoomCode} as ${authorName}`);
