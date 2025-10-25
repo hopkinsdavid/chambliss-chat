@@ -1,4 +1,7 @@
 // server/index.js
+
+require ('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -6,18 +9,24 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-app.use(cors());
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173"; // Use env var, fallback to localhost
+
+app.use(cors({
+    origin: FRONTEND_URL, // Use the variable
+    methods: ["GET", "POST", "PATCH", "DELETE"] // Keep allowed methods
+}));
+
 app.use(express.json());
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: FRONTEND_URL, // Use the variable
         methods: ["GET", "POST", "PATCH", "DELETE"]
     }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 const activeRooms = {};
 const MAX_USERS_PER_ROOM = 6;
