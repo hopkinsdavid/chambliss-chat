@@ -286,12 +286,16 @@ function App({ room: initialRoom, username: initialUsername, userType = 'user', 
                    <p id="author">{msg.author}</p>
                    {/* ************************************** */}
                   <p id="time">{msg.time}</p>
-                  {(userId === msg.userId || userType === 'admin') && !editingMessage && (
+                  {!editingMessage && (
                     <div className="message-actions">
-                      {userId === msg.userId && /* Only author can edit */
+                      {/* Show Edit button if user is the author OR is an admin */}
+                      {(userId === msg.userId || userType === 'admin') &&
                         <button className="action-btn edit-btn" title="Edit" onClick={() => startEditing(msg)}>✎</button>
                       }
-                      <button className="action-btn delete-btn" title="Delete" onClick={() => deleteMessage(msg.id)}>🗑️</button>
+                      {/* Show Delete button if user is the author OR is an admin */}
+                      {(userId === msg.userId || userType === 'admin') &&
+                        <button className="action-btn delete-btn" title="Delete" onClick={() => deleteMessage(msg.id)}>🗑️</button>
+                      }
                     </div>
                   )}
                    {editingMessage?.id === msg.id && (

@@ -47,10 +47,10 @@ const PORT = process.env.PORT || 3001;
 const activeRooms = {};
 const MAX_USERS_PER_ROOM = 6;
 
-// Santize Input
 const sanitizeInput = (str) => {
     if (typeof str !== 'string') return str;
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    // Kept & < > to prevent basic HTML tag injection if data is used elsewhere.
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 };
 
 function cleanupExpiredRooms() {
@@ -192,6 +192,7 @@ io.on("connection", (socket) => {
              // Update socket ID on rejoin
              existingUser.socketId = socket.id;
              existingUser.authorName = authorName; // Ensure role is updated if they rejoin with a different code type
+             existingUser.userType = userType; // Update userType as well
              console.log(`User ${userId} (${authorName}) reconnected to room ${baseRoomCode} with socket ${socket.id}`);
              socket.emit("room_join_status", { success: true, message: `Rejoined room ${baseRoomCode}`, authorName: authorName, userId: existingUser.userId });
         } else {
@@ -243,21 +244,19 @@ io.on("connection", (socket) => {
         const baseRoomCode = data.room.startsWith('s') ? data.room.substring(1) : data.room;
         if (activeRooms[baseRoomCode] && activeRooms[baseRoomCode].expiresAt > Date.now()) {
             const user = activeRooms[baseRoomCode].users.find(u => u.socketId === socket.id);
-             if (!user) return; // Ignore if user not found
+            if (!user) return;
 
             const messageIndex = activeRooms[baseRoomCode].messages.findIndex(msg => msg.id === data.id);
             if (messageIndex !== -1) {
-                 // Check if the user is the author or an admin
-                 if (activeRooms[baseRoomCode].messages[messageIndex].userId === user.userId || user.userType === 'admin') {
-                     const updatedMessageContent = sanitizeInput(data.message);
-                     activeRooms[baseRoomCode].messages[messageIndex].message = updatedMessageContent;
-                     activeRooms[baseRoomCode].messages[messageIndex].edited = true; // Mark as edited
-                     // Broadcast the update to others in the room
-                     io.to(baseRoomCode).emit("message_updated", { id: data.id, message: updatedMessageContent, edited: true });
+                const msg = activeRooms[baseRoomCode].messages[messageIndex];
+                 // STRICT PERMISSION CHECK: Author can edit own, Admin can edit all.
+                 if (msg.userId === user.userId || user.userType === 'admin') {
+                    const updatedMessageContent = sanitizeInput(data.message);
+                    msg.message = updatedMessageContent;
+                    msg.edited = true;
+                    io.to(baseRoomCode).emit("message_updated", { id: data.id, message: updatedMessageContent, edited: true });
                  } else {
-                     console.warn(`User ${user.userId} attempted to edit message ${data.id} without permission.`);
-                     // Optionally notify the user they can't edit this message
-                     // socket.emit("update_message_error", { id: data.id, message: "Permission denied." });
+                    console.warn(`User ${user.userId} attempted to edit message ${data.id} without permission.`);
                  }
             }
         }
@@ -266,25 +265,22 @@ io.on("connection", (socket) => {
     socket.on("delete_message", (data) => {
         const baseRoomCode = data.room.startsWith('s') ? data.room.substring(1) : data.room;
         if (activeRooms[baseRoomCode] && activeRooms[baseRoomCode].expiresAt > Date.now()) {
-             const user = activeRooms[baseRoomCode].users.find(u => u.socketId === socket.id);
-             if (!user) return; // Ignore if user not found
+                const user = activeRooms[baseRoomCode].users.find(u => u.socketId === socket.id);
+                if (!user) return;
 
-             const messageIndex = activeRooms[baseRoomCode].messages.findIndex(msg => msg.id === data.id);
-
-             if (messageIndex !== -1) {
-                  // Check if the user is the author or an admin
-                 if (activeRooms[baseRoomCode].messages[messageIndex].userId === user.userId || user.userType === 'admin') {
-                     activeRooms[baseRoomCode].messages.splice(messageIndex, 1); // Remove the message
-                     io.to(baseRoomCode).emit("message_deleted", { id: data.id });
-                 } else {
-                     console.warn(`User ${user.userId} attempted to delete message ${data.id} without permission.`);
-                     // Optionally notify the user they can't delete this message
-                     // socket.emit("delete_message_error", { id: data.id, message: "Permission denied." });
+                const messageIndex = activeRooms[baseRoomCode].messages.findIndex(msg => msg.id === data.id);
+                if (messageIndex !== -1) {
+                    const msg = activeRooms[baseRoomCode].messages[messageIndex];
+                 // STRICT PERMISSION CHECK: Author can delete own, Admin can delete all.
+                if (msg.userId === user.userId || user.userType === 'admin') {
+                    activeRooms[baseRoomCode].messages.splice(messageIndex, 1);
+                    io.to(baseRoomCode).emit("message_deleted", { id: data.id });
+                } else {
+                    console.warn(`User ${user.userId} attempted to delete message ${data.id} without permission.`);
                  }
              }
         }
     });
-
 
     socket.on("disconnect", (reason) => {
         console.log(`User Disconnected: ${socket.id}, Reason: ${reason}`);
